@@ -656,7 +656,7 @@
           el('h2', {text: c.c}),
           el('div', {class: 'dsub'}, c.s !== null ? `${full(c.s)} iscritti` : 'Iscritti nascosti'),
           el('div', {class: 'kv'}, ...[['Video nel periodo', full(c.nv)], ['Uno ogni', c.nv ? dec1(GG / c.nv) + ' giorni' : '—'], ['Esplosi', `${c.ne} (${dec1(c.pe)}%)`], ['Media di tutti', dec1(BASE) + '%'],
-            ['Visualizzazioni tipiche', fmt(c.mv)], ['Visualizzazioni totali', fmt(c.tv)]].map(([k, val]) => el('div', {class: 'out'}, el('div', {class: 'k'}, k), el('div', {class: 'v'}, val)))),
+            ['Visualizzazioni tipiche', fmt(c.mv)], ['Visualizzazioni totali', fmt(c.tv)], ...(c.sl ? [['Solito (ultimi 50 Shorts)', fmt(c.sl)], ['Tipiche ÷ solito', '×' + dec1(c.xs)]] : [])].map(([k, val]) => el('div', {class: 'out'}, el('div', {class: 'k'}, k), el('div', {class: 'v'}, val)))),
           el('div', {class: 'acts'}, OKID.test(c.ci) ? el('a', {class: 'btn primary', href: urlCanale(c.ci), target: '_blank', rel: 'noopener noreferrer'}, 'Apri il canale su YouTube') : null),
           el('p', {class: 'note'}, `Il canale ha pubblicato circa ${dec1(sett)} video a settimana tra il ${dataIt(INFO.dal)} e il ${dataIt(INFO.al)}. ${c.pe >= BASE ? 'Esplodono più spesso della media.' : 'Esplodono meno spesso della media.'}`))),
       vids.length ? el('div', {class: 'dsec'}, el('h3', {text: 'I suoi video migliori in questa raccolta'}), el('div', {class: 'minigrid'}, vids.slice(0, 12).map((o) => miniCard(o)))) :
@@ -725,11 +725,34 @@
     host.append(el('span', {class: 'lbl'}, label));
     opts.forEach(([v, t]) => host.append(el('button', {class: 'chip', type: 'button', 'data-ck': key, 'data-v': v, onclick: () => { S[key] = v; S.cmostra = 50; onChange(); }}, t)));
   }
-  const COLS = [['c', 'Canale', 0], ['s', 'Iscritti'], ['nv', 'Video'], ['fq', 'Al mese'], ['pe', 'Esplosi'], ['mv', 'Visualizzazioni tipiche'], ['tv', 'Visualizzazioni totali'], ['b', 'Miglior video', 0]];
+  const COLS = [['c', 'Canale', 0], ['s', 'Iscritti'], ['nv', 'Video'], ['fq', 'Al mese'], ['pe', 'Esplosi'], ['mv', 'Visualizzazioni tipiche'], ['tv', 'Visualizzazioni totali'], ['sl', 'Solito (ultimi 50)'], ['xs', 'Tipiche ÷ solito'], ['b', 'Miglior video', 0]];
+  // "Solito" del canale (mediana dei suoi ultimi 50 Shorts): lo legge Radar Nicchie e lo condivide in questa tabella. Qui lo si legge soltanto.
+  const SB_URL = 'https://omqusyuzffmwrhrvyitm.supabase.co', SB_KEY = 'sb_publishable__oFQD_ntx4uVhOaTO09wsQ_94FLMBdo';
+  const SOLITO = {stato: 'attesa', n: 0, da: null};
+  async function caricaSolito() {
+    try {
+      const mappa = new Map();
+      for (let off = 0; off < 20000; off += 1000) {
+        const r = await fetch(`${SB_URL}/rest/v1/canali_solito?select=canale_id,solito,n,letto_il&order=canale_id&offset=${off}&limit=1000`, {headers: {apikey: SB_KEY}});
+        if (!r.ok) throw new Error(r.status);
+        const righe = await r.json();
+        righe.forEach((x) => { if (x.solito > 0) mappa.set(x.canale_id, {sl: +x.solito, t: x.letto_il}); });
+        if (righe.length < 1000) break;
+      }
+      let n = 0;
+      for (const c of CAN) {
+        const x = mappa.get(c.ci);
+        c.sl = x ? x.sl : null; c.slt = x ? x.t : null; c.xs = x && c.mv ? c.mv / x.sl : null;
+        if (x) n++;
+      }
+      SOLITO.stato = 'ok'; SOLITO.n = n;
+    } catch (e) { SOLITO.stato = 'errore'; }
+    if (S.tab === 'canali') disegnaCanali();
+  }
   function filtraCanali() {
     const q = S.qc.trim().toLowerCase(), [s0, s1] = rng('csubs'), nv = mn('cnv') || 0, pe = mn('cpe') || 0;
     const k = S.csort;
-    const val = (c) => (k === 'fq' ? c.nv : c[k]);
+    const val = (c) => (k === 'fq' ? c.nv : c[k]);   // 'sl' e 'xs' possono mancare: finiscono in fondo
     return CAN.filter((c) => (!q || c.c.toLowerCase().includes(q)) && inR(c.s, s0, s1) && c.nv >= nv && c.pe >= pe)
       .sort((a, b) => (k === 'c' ? S.cdir * a.c.localeCompare(b.c) : S.cdir * ((val(a) ?? -1) - (val(b) ?? -1))));
   }
@@ -749,9 +772,11 @@
         el('td', {text: fmt(c.s)}), el('td', {text: full(c.nv)}), el('td', {text: dec1(c.nv / ((INFO.giorni || 82) / 30))}),
         el('td', null, el('span', {class: 'pct'}, el('i', {style: `--w:${Math.min(100, c.pe)}%;--bar:${c.pe >= BASE ? 'var(--accent)' : 'var(--muted)'}`}), dec1(c.pe) + '%')),
         el('td', {text: fmt(c.mv)}), el('td', {text: fmt(c.tv)}),
+        el('td', {text: c.sl ? fmt(c.sl) : '—', title: c.slt ? 'Letto il ' + dataIt(c.slt.slice(0, 10)) : 'Non ancora letto da Radar Nicchie'}), el('td', {text: c.xs ? '×' + dec1(c.xs) : '—'}),
         el('td', {style: 'text-align:left'}, c.b && VBYID.get(c.b) ? el('button', {class: 'chip', type: 'button', onclick: (e) => { e.stopPropagation(); apriVideo(VBYID.get(c.b)); }}, 'Guarda') : '—'));
     });
     put(out, el('div', {class: 'tablewrap'}, el('table', null, el('thead', null, head), el('tbody', null, righe))),
+      SOLITO.stato === 'ok' ? el('p', {class: 'note'}, `Il “solito” (mediana degli ultimi 50 Shorts) è noto per ${full(SOLITO.n)} canali su ${full(CAN.length)}: arriva da Radar Nicchie. Dove c’è “—” il canale non è ancora stato letto. “Tipiche ÷ solito” confronta le visualizzazioni tipiche in questa raccolta con il solito del canale.`) : SOLITO.stato === 'errore' ? el('p', {class: 'note'}, 'Non riesco a leggere il “solito” dei canali in questo momento.') : null,
       l.length > S.cmostra ? el('div', {class: 'more'}, el('button', {class: 'btn', onclick: () => { S.cmostra += 50; disegnaCanali(); }}, `Mostra altri ${Math.min(50, l.length - S.cmostra)}`)) : null);
   }
   function costruisciCanali() {
@@ -935,6 +960,7 @@
     $('foot').textContent = `Un video “esplode” se fa almeno 3 volte il normale del suo canale (la mediana dei suoi 30 video precedenti). Succede al ${dec1(BASE)}% dei video. I video usciti da meno di 10 giorni sono segnati “in crescita”: i loro numeri sono ancora parziali e non contano nelle percentuali. Il numero “×” sulle anteprime dice quante volte il normale ha fatto quel video.`;
     $('q').value = S.q; $('qc').value = S.qc; $('i-subs').value = S.iSubs; $('i-norm').value = S.iNorm; $('i-tit').value = S.titolo;
     costruisciFiltri(); costruisciCanali(); costruisciStrumenti(); aggiornaConta();
+    caricaSolito();
     $('tab-video').addEventListener('click', () => vai('video')); $('tab-canali').addEventListener('click', () => vai('canali'));
     $('tab-strumenti').addEventListener('click', () => vai('strumenti')); $('tab-stato').addEventListener('click', () => vai('stato')); $('tab-preferiti').addEventListener('click', () => vai('preferiti')); $('tab-gustavior').addEventListener('click', () => vai('gustavior'));
     $('b-copia-pref').addEventListener('click', () => { const l = VID.filter((v) => PREF.has(v.i)); if (l.length) copia(testoElenco(l), `Copiati ${l.length} video`); else toast('Non hai ancora preferiti'); });
