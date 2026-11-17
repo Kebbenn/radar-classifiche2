@@ -458,7 +458,7 @@
   const BASE = INFO.base_pct;
   const CANBY = new Map(CAN.map((c) => [c.ci, c]));
   const BYCH = new Map();
-  for (const v of VID) {
+  function preparaVideo(v) {
     v.eta = Math.round((AL - new Date(v.u + 'T12:00:00')) / 864e5);
     v.ld = v.l !== null && v.v ? v.l / v.v : null;
     v.vs = v.s ? v.v / v.s : null;
@@ -469,6 +469,7 @@
     if (!BYCH.has(v.ci)) BYCH.set(v.ci, []);
     BYCH.get(v.ci).push(v);
   }
+  for (const v of VID) preparaVideo(v);
   const VBYID = new Map(VID.map((v) => [v.i, v]));
   const MED_LD = median(VID.map((v) => v.ld));
   const MED_DUR = median(VID.filter((v) => v.x >= 3).map((v) => v.d));
@@ -619,7 +620,7 @@
     if (v.ld !== null) perche.push(`Mi piace: ${dec1(v.ld * 100)}% delle visualizzazioni, ${v.ld >= MED_LD ? 'sopra' : 'sotto'} la mediana di questa raccolta (${dec1(MED_LD * 100)}%).`);
     if (v.d !== null) perche.push(`Dura ${v.d} secondi. I video esplosi di questa raccolta durano in mediana ${Math.round(MED_DUR)} secondi.`);
     const d = new Date(v.u + 'T12:00:00');
-    perche.push(`Uscito ${fa(v.u)}: ${giorni[d.getDay()]} ${dataIt(v.u)} alle ${v.h}:00 (ora italiana).`);
+    perche.push(`Uscito ${fa(v.u)}: ${giorni[d.getDay()]} ${dataIt(v.u)}` + (v.h !== null && v.h !== undefined ? ` alle ${v.h}:00 (ora italiana).` : '.'));
     perche.push(`Il titolo ha ${v.t.length} caratteri. Nei video esplosi di questa raccolta sono in mediana ${Math.round(MED_LEN)}.`);
     const simili = VID.filter((o) => o.i !== v.i).map((o) => [o, o.w.filter((w) => v.w.includes(w)).length]).filter((p) => p[1] >= 2).sort((a, b) => b[1] - a[1] || b[0].v - a[0].v).slice(0, 6).map((p) => p[0]);
     const stessi = (BYCH.get(v.ci) || []).filter((o) => o.i !== v.i).slice(0, 6);
@@ -763,6 +764,15 @@
         SOLITO.outlier.push(...lista);
       });
       SOLITO.outlier.sort((a, b) => b.x - a.x);
+      // gli stessi video entrano nell'elenco Video, come tutti gli altri (si cercano e si filtrano allo stesso modo)
+      let nuovi = 0;
+      for (const o of SOLITO.outlier) {
+        if (VBYID.has(o.i) || !o.d || !/^\d{4}-\d{2}-\d{2}$/.test(o.d)) continue;
+        const v = {i: o.i, t: o.t, c: o.c, ci: o.ci, s: o.s === undefined ? null : o.s, v: o.v, x: Math.round(o.x * 10) / 10, n: Math.round(o.sl), d: null, u: o.d, h: null, l: null, m: null};
+        if (!THUMB[v.i]) THUMB[v.i] = thumbYt(v.i);
+        preparaVideo(v); VID.push(v); VBYID.set(v.i, v); nuovi++;
+      }
+      if (nuovi && S.tab === 'video') disegnaVideo();
       SOLITO.stato = 'ok'; SOLITO.n = n;
     } catch (e) { SOLITO.stato = 'errore'; }
     if (S.tab === 'canali') disegnaCanali();
