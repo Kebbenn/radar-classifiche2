@@ -275,7 +275,6 @@
     <nav class="tabs" role="tablist" aria-label="Sezioni">
       <button class="tab" role="tab" id="tab-video" data-tab="video">Video</button>
       <button class="tab" role="tab" id="tab-canali" data-tab="canali">Canali</button>
-      <button class="tab" role="tab" id="tab-outlier" data-tab="outlier">Outlier<span class="cnt" id="cnt-out"></span></button>
       <button class="tab" role="tab" id="tab-strumenti" data-tab="strumenti">Strumenti</button>
       <button class="tab" role="tab" id="tab-stato" data-tab="stato">Stato</button>
       <button class="tab" role="tab" id="tab-preferiti" data-tab="preferiti">Preferiti<span class="cnt" id="cnt-pref"></span></button>
@@ -362,19 +361,6 @@
 
 <section id="sez-gustavior" hidden>
   <div class="wrap" id="gustavior-host"></div>
-</section>
-
-<section id="sez-outlier" hidden>
-  <div class="filters"><div class="wrap">
-    <div class="frow">
-      <label class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-        <input type="search" id="qo" placeholder="Cerca per titolo o canale" aria-label="Cerca un video outlier" autocomplete="off"></label>
-    </div>
-  </div></div>
-  <div class="wrap">
-    <div class="stats" id="stats-o"></div>
-    <div id="out-outlier" style="margin-bottom:40px"></div>
-  </div>
 </section>
 
 <section id="sez-preferiti" hidden>
@@ -734,30 +720,11 @@
   const testoElenco = (l) => l.map((v) => `${v.t} | ${v.c} | ${full(v.v)} visualizzazioni | ${dec1(v.x)}x il normale | ${url(v.i)}`).join('\n');
 
 
-  // ---------- disegno: OUTLIER (video che Radar Nicchie ha trovato negli ultimi 50 Shorts dei canali) ----------
-  const OST = {q: '', max: 20};
+  // ---------- video outlier (trovati da Radar Nicchie negli ultimi 50 Shorts di un canale): si vedono nella scheda del canale ----------
   const thumbYt = (id) => 'https://i.ytimg.com/vi/' + encodeURIComponent(id) + '/mqdefault.jpg';
   const cellaVideoOut = (o, conCanale) => el('div', {class: 'who'},
     el('img', {src: thumbYt(o.i), alt: '', loading: 'lazy', style: 'width:64px;height:40px;object-fit:cover;border-radius:6px;flex:none'}),
     el('div', null, el('a', {href: url(o.i), target: '_blank', rel: 'noopener noreferrer', onclick: (e) => e.stopPropagation()}, el('b', {text: o.t})), conCanale ? el('div', {class: 'dsub', text: o.c}) : null));
-  function disegnaOutlier() {
-    const out = $('out-outlier');
-    if (SOLITO.stato === 'attesa') { put(out, el('div', {class: 'empty'}, el('b', {text: 'Carico i video…'}))); $('stats-o').replaceChildren(); return; }
-    if (SOLITO.stato === 'errore') { put(out, el('div', {class: 'empty'}, el('b', {text: 'Non riesco a leggere i video outlier in questo momento'}), 'Riprova più tardi.')); $('stats-o').replaceChildren(); return; }
-    const q = OST.q.trim().toLowerCase();
-    const l = SOLITO.outlier.filter((o) => !q || o.t.toLowerCase().includes(q) || o.c.toLowerCase().includes(q));
-    $('stats-o').replaceChildren(statTile('Video outlier', full(l.length), `su ${full(SOLITO.outlier.length)} raccolti`), statTile('Canali', full(new Set(l.map((o) => o.ci)).size)),
-      statTile('Il più forte', l.length ? '×' + dec1(l[0].x) : '—', l.length ? fmt(l[0].v) + ' contro ' + fmt(l[0].sl) + ' del suo canale' : ''),
-      statTile('Tipico', l.length ? '×' + dec1(median(l.map((o) => o.x))) : '—', 'la mediana'));
-    if (!l.length) { put(out, el('div', {class: 'empty'}, el('b', {text: SOLITO.outlier.length ? 'Nessun video con questa ricerca' : 'Ancora nessun video outlier raccolto'}), SOLITO.outlier.length ? '' : 'Li aggiunge Radar Nicchie quando legge gli ultimi 50 Shorts di un canale.')); return; }
-    const testa = el('tr', null, ['Video', 'Iscritti', 'Uscito', 'Visualizzazioni', 'Solito del canale', '× il solito'].map((t, i) => el('th', {style: i === 0 ? 'text-align:left' : null, text: t})));
-    const righe = l.slice(0, OST.max).map((o) => el('tr', null,
-      el('td', null, cellaVideoOut(o, true)), el('td', {text: o.s === null || o.s === undefined ? 'nascosti' : fmt(o.s)}), el('td', {text: o.d ? dataIt(o.d) : '—'}),
-      el('td', {text: fmt(o.v)}), el('td', {text: fmt(o.sl)}), el('td', null, el('b', {text: '×' + dec1(o.x)}))));
-    put(out, el('div', {class: 'tablewrap'}, el('table', null, el('thead', null, testa), el('tbody', null, righe))),
-      el('p', {class: 'note'}, 'Sono i video che hanno fatto almeno 5 volte il solito del loro canale (la mediana degli ultimi 50 Shorts) e almeno 40.000 visualizzazioni. Li raccoglie Radar Nicchie: qui compaiono solo i canali già letti.'),
-      l.length > OST.max ? el('div', {class: 'more'}, el('button', {class: 'btn', onclick: () => { OST.max += 20; disegnaOutlier(); }}, `Mostra altri ${Math.min(20, l.length - OST.max)}`)) : null);
-  }
 
   // ---------- disegno: CANALI ----------
   const CSUBS = [['all', 'Tutti'], ['0-999', 'Meno di 1k'], ['0-9999', 'Meno di 10k'], ['10000-99999', '10k–100k'], ['100000-', 'Oltre 100k']];
@@ -797,9 +764,8 @@
       });
       SOLITO.outlier.sort((a, b) => b.x - a.x);
       SOLITO.stato = 'ok'; SOLITO.n = n;
-      $('cnt-out').textContent = SOLITO.outlier.length ? ' ' + full(SOLITO.outlier.length) : '';
     } catch (e) { SOLITO.stato = 'errore'; }
-    if (S.tab === 'canali') disegnaCanali(); else if (S.tab === 'outlier') disegnaOutlier();
+    if (S.tab === 'canali') disegnaCanali();
   }
   function filtraCanali() {
     const q = S.qc.trim().toLowerCase(), [s0, s1] = rng('csubs'), nv = mn('cnv') || 0, pe = mn('cpe') || 0;
@@ -996,13 +962,13 @@
       el('p', {class: 'note warn', style: 'margin-top:22px'}, GUS.uso));
   }
 
-  const TABS = ['video', 'canali', 'outlier', 'strumenti', 'stato', 'preferiti', 'gustavior'];
+  const TABS = ['video', 'canali', 'strumenti', 'stato', 'preferiti', 'gustavior'];
   function vai(tab, dalHash) {
     if (!TABS.includes(tab)) tab = 'video';
     S.tab = tab;
     TABS.forEach((t) => { $('sez-' + t).hidden = t !== tab; $('tab-' + t).setAttribute('aria-selected', String(t === tab)); });
     if (!dalHash && location.hash.slice(1) !== tab) { try { history.replaceState(null, '', '#' + tab); } catch (e) { location.hash = tab; } }
-    if (tab === 'video') disegnaVideo(); else if (tab === 'canali') disegnaCanali(); else if (tab === 'outlier') disegnaOutlier(); else if (tab === 'strumenti') { disegnaCalcolatore(); disegnaTitolo(); disegnaTassi(); } else if (tab === 'stato') disegnaStato(); else if (tab === 'gustavior') disegnaGustavior(); else disegnaPref();
+    if (tab === 'video') disegnaVideo(); else if (tab === 'canali') disegnaCanali(); else if (tab === 'strumenti') { disegnaCalcolatore(); disegnaTitolo(); disegnaTassi(); } else if (tab === 'stato') disegnaStato(); else if (tab === 'gustavior') disegnaGustavior(); else disegnaPref();
   }
 
   // ---------- avvio ----------
@@ -1013,7 +979,7 @@
     $('q').value = S.q; $('qc').value = S.qc; $('i-subs').value = S.iSubs; $('i-norm').value = S.iNorm; $('i-tit').value = S.titolo;
     costruisciFiltri(); costruisciCanali(); costruisciStrumenti(); aggiornaConta();
     caricaSolito();
-    $('tab-video').addEventListener('click', () => vai('video')); $('tab-canali').addEventListener('click', () => vai('canali')); $('tab-outlier').addEventListener('click', () => vai('outlier')); $('qo').addEventListener('input', (e) => { OST.q = e.target.value; OST.max = 20; disegnaOutlier(); });
+    $('tab-video').addEventListener('click', () => vai('video')); $('tab-canali').addEventListener('click', () => vai('canali'));
     $('tab-strumenti').addEventListener('click', () => vai('strumenti')); $('tab-stato').addEventListener('click', () => vai('stato')); $('tab-preferiti').addEventListener('click', () => vai('preferiti')); $('tab-gustavior').addEventListener('click', () => vai('gustavior'));
     $('b-copia-pref').addEventListener('click', () => { const l = VID.filter((v) => PREF.has(v.i)); if (l.length) copia(testoElenco(l), `Copiati ${l.length} video`); else toast('Non hai ancora preferiti'); });
     $('b-svuota').addEventListener('click', () => { PREF.clear(); salvaPref(); aggiornaConta(); disegnaPref(); });
