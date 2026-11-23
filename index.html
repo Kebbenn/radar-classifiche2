@@ -341,6 +341,7 @@
     </div>
     <nav class="tabs" role="tablist" aria-label="Sezioni">
       <button class="tab" role="tab" id="tab-video" data-tab="video">Video</button>
+      <button class="tab" role="tab" id="tab-outlier" data-tab="outlier">Outlier</button>
       <button class="tab" role="tab" id="tab-canali" data-tab="canali">Canali</button>
       <button class="tab" role="tab" id="tab-stato" data-tab="stato">Stato</button>
       <button class="tab" role="tab" id="tab-preferiti" data-tab="preferiti">Preferiti<span class="cnt" id="cnt-pref"></span></button>
@@ -639,7 +640,7 @@
     const q = S.q.trim().toLowerCase();
     const [s0, s1] = rng('subs');
     const per = mn('periodo'), vmin = mn('volte') || 0, minv = mn('minv') || 0;
-    const out = VID.filter((v) => (!q || v.hay.includes(q)) && (per === null || v.eta <= per) && inR(v.s, s0, s1) && v.x >= vmin && v.v >= minv
+    const out = (S.tab === 'outlier' ? VID.filter((v) => v.out) : VID).filter((v) => (!q || v.hay.includes(q)) && (per === null || v.eta <= per) && inR(v.s, s0, s1) && v.x >= vmin && v.v >= minv
       && (S.cat === 'all' || v.k === S.cat) && (S.sub === 'all' || v.z === S.sub) && (S.mom === 'all' || v.o === S.mom));
     return out.sort(SORTS[S.sort][1]);
   }
@@ -893,14 +894,14 @@
     const canali = new Set(lista.map((v) => v.ci)).size;
     const esplosi = lista.filter((v) => v.x >= 5).length;
     $('stats').replaceChildren(
-      statTile('Video trovati', full(lista.length), `su ${full(VID.length)} in raccolta`),
+      statTile('Video trovati', full(lista.length), S.tab === 'outlier' ? `su ${full(VID.filter((v) => v.out).length)} outlier di Radar Nicchie` : `su ${full(VID.length)} in raccolta`),
       statTile('Canali diversi', full(canali)),
       statTile('Visualizzazioni mediane', lista.length ? fmt(median(lista.map((v) => v.v))) : '—'),
       statTile('Volte il normale (mediana)', lista.length ? dec1(median(lista.map((v) => v.x))) + '×' : '—', lista.length ? `${Math.round(esplosi / lista.length * 100)}% oltre 5×` : ''),
       statTile('Durata mediana', lista.length ? Math.round(median(lista.map((v) => v.d))) + ' s' : '—'),
       statTile('Iscritti mediani', lista.length ? fmt(median(lista.map((v) => v.s))) : '—'));
     const out = $('out-video');
-    if (!lista.length) { put(out, el('div', {class: 'empty'}, el('b', {text: 'Nessun video con questi filtri'}), 'Prova ad allargare i filtri o premi “Azzera filtri”.')); return; }
+    if (!lista.length) { put(out, el('div', {class: 'empty'}, el('b', {text: S.tab === 'outlier' && !VID.some((v) => v.out) ? 'Ancora nessun outlier' : 'Nessun video con questi filtri'}), S.tab === 'outlier' && !VID.some((v) => v.out) ? 'Compaiono quando Radar Nicchie legge gli ultimi 50 Shorts dei canali.' : 'Prova ad allargare i filtri o premi “Azzera filtri”.')); return; }
     const mostra = lista.slice(0, S.mostra);
     const cont = S.vista === 'griglia' ? el('div', {class: 'grid'}, mostra.map((v) => card(v))) : el('div', {class: 'list'}, mostra.map((v) => riga(v)));
     put(out, cont, lista.length > S.mostra ? el('div', {class: 'more'}, el('button', {class: 'btn', onclick: () => { S.mostra += 48; disegnaVideo(); }}, `Mostra altri ${Math.min(48, lista.length - S.mostra)}`)) : null);
@@ -999,12 +1000,13 @@
       // gli stessi video entrano nell'elenco Video, come tutti gli altri (si cercano e si filtrano allo stesso modo)
       let nuovi = 0;
       for (const o of SOLITO.outlier) {
-        if (VBYID.has(o.i) || !o.d || !/^\d{4}-\d{2}-\d{2}$/.test(o.d)) continue;
+        if (VBYID.has(o.i)) { VBYID.get(o.i).out = true; continue; }
+        if (!o.d || !/^\d{4}-\d{2}-\d{2}$/.test(o.d)) continue;
         const v = {i: o.i, t: o.t, c: o.c, ci: o.ci, s: o.s === undefined ? null : o.s, v: o.v, x: Math.round(o.x * 10) / 10, n: Math.round(o.sl), d: null, u: o.d, h: null, l: null, m: null};
         if (!THUMB[v.i]) THUMB[v.i] = thumbYt(v.i);
-        preparaVideo(v); VID.push(v); VBYID.set(v.i, v); nuovi++;
+        v.out = true; preparaVideo(v); VID.push(v); VBYID.set(v.i, v); nuovi++;
       }
-      if (nuovi && S.tab === 'video') disegnaVideo();
+      if ((nuovi || SOLITO.outlier.length) && (S.tab === 'video' || S.tab === 'outlier')) disegnaVideo();
       SOLITO.stato = 'ok'; SOLITO.n = mappa.size; SOLITO.aggiunti = nuovi; SOLITO.coOut = new Set(SOLITO.outlier.map((o) => o.ci)).size;
       // quando: per ogni giorno, canali letti, Shorts letti e outlier trovati (giorno dell'ultima lettura del canale)
       const perG = new Map();
@@ -1246,15 +1248,15 @@
       sezioneSimili(c, gForti, () => { gForti = !gForti; disegnaGustavior(); }));
   }
 
-  const TABS = ['video', 'canali', 'stato', 'preferiti', 'gustavior'];
+  const TABS = ['video', 'outlier', 'canali', 'stato', 'preferiti', 'gustavior'];
   const tabDa = (h) => (h === 'strumenti' ? 'gustavior' : h);
   function vai(tab, dalHash) {
     tab = tabDa(tab);
     if (!TABS.includes(tab)) tab = 'video';
     S.tab = tab;
-    TABS.forEach((t) => { $('sez-' + t).hidden = t !== tab; $('tab-' + t).setAttribute('aria-selected', String(t === tab)); });
+    TABS.forEach((t) => { $('sez-' + (t === 'outlier' ? 'video' : t)).hidden = !(t === tab || (t === 'video' && tab === 'outlier') || (t === 'outlier' && tab === 'video')); $('tab-' + t).setAttribute('aria-selected', String(t === tab)); });
     if (!dalHash && location.hash.slice(1) !== tab) { try { history.replaceState(null, '', '#' + tab); } catch (e) { location.hash = tab; } }
-    if (tab === 'video') disegnaVideo(); else if (tab === 'canali') disegnaCanali(); else if (tab === 'gustavior') { disegnaGustavior(); disegnaCalcolatore(); disegnaTitolo(); disegnaTassi(); } else if (tab === 'stato') disegnaStato(); else disegnaPref();
+    if (tab === 'video' || tab === 'outlier') disegnaVideo(); else if (tab === 'canali') disegnaCanali(); else if (tab === 'gustavior') { disegnaGustavior(); disegnaCalcolatore(); disegnaTitolo(); disegnaTassi(); } else if (tab === 'stato') disegnaStato(); else disegnaPref();
   }
 
   // ---------- sincronizzazione tra browser: stessi preferiti, competitor e scorciatoie ovunque ----------
@@ -1294,7 +1296,7 @@
   const redisegnaSync = () => {
     if (typeof aggiornaConta === 'function') aggiornaConta();
     disegnaScorc();
-    if (S.tab === 'preferiti') disegnaPref(); else if (S.tab === 'canali') disegnaCanali(); else if (S.tab === 'video') disegnaVideo();
+    if (S.tab === 'preferiti') disegnaPref(); else if (S.tab === 'canali') disegnaCanali(); else if (S.tab === 'video' || S.tab === 'outlier') disegnaVideo();
   };
   async function sincronizza() {
     if (SY.occupato) { SY.ancora = true; return; }
@@ -1388,7 +1390,7 @@
     $('q').value = S.q; $('qc').value = S.qc; $('i-subs').value = S.iSubs; $('i-norm').value = S.iNorm; $('i-tit').value = S.titolo;
     costruisciFiltri(); costruisciCanali(); costruisciStrumenti(); aggiornaConta();
     caricaSolito(); iniziaSync();
-    $('tab-video').addEventListener('click', () => vai('video')); $('tab-canali').addEventListener('click', () => vai('canali'));
+    $('tab-video').addEventListener('click', () => vai('video')); $('tab-outlier').addEventListener('click', () => vai('outlier')); $('tab-canali').addEventListener('click', () => vai('canali'));
     $('tab-stato').addEventListener('click', () => vai('stato')); $('tab-preferiti').addEventListener('click', () => vai('preferiti')); $('tab-gustavior').addEventListener('click', () => vai('gustavior'));
     $('b-copia-pref').addEventListener('click', () => { if (S.prefVista === 'comp') { const nomi = [...COMP].map((id) => ((COMP_T[id] || [])[0] || id) + ' ' + urlCanale(id)); if (nomi.length) copia(nomi.join('\n'), `Copiati ${nomi.length} competitor`); else toast('Non hai ancora competitor'); return; } const l = VID.filter((v) => PREF.has(v.i)); if (l.length) copia(testoElenco(l), `Copiati ${l.length} video`); else toast('Non hai ancora preferiti'); });
     $('b-svuota').addEventListener('click', () => { if (S.prefVista === 'comp') { if (COMP.size && window.confirm('Togliere tutti i competitor?')) { COMP.clear(); COMP_T = {}; salvaComp(); aggiornaConta(); disegnaPref(); } return; } PREF.clear(); PREF_T = {}; salvaTutto(); aggiornaConta(); disegnaPref(); });
