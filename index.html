@@ -970,7 +970,7 @@
   const COLS = [['c', 'Canale', 0], ['s', 'Iscritti'], ['nv', 'Video'], ['fq', 'Al mese'], ['pe', 'Esplosi'], ['mv', 'Visualizzazioni tipiche'], ['tv', 'Visualizzazioni totali'], ['sl', 'Solito (ultimi 50)'], ['xs', 'Tipiche ÷ solito'], ['b', 'Miglior video', 0]];
   // "Solito" del canale (mediana dei suoi ultimi 50 Shorts): lo legge Radar Nicchie e lo condivide in questa tabella. Qui lo si legge soltanto.
   const SB_URL = 'https://omqusyuzffmwrhrvyitm.supabase.co', SB_KEY = 'sb_publishable__oFQD_ntx4uVhOaTO09wsQ_94FLMBdo';
-  const SOLITO = {stato: 'attesa', n: 0, da: null, outlier: []};
+  const SOLITO = {stato: 'attesa', n: 0, da: null, outlier: [], coOut: 0, aggiunti: 0, giorni: []};
   async function caricaSolito() {
     try {
       const mappa = new Map();
@@ -978,7 +978,7 @@
         const r = await fetch(`${SB_URL}/rest/v1/canali_solito?select=canale_id,solito,n,letto_il,outlier&order=canale_id&offset=${off}&limit=1000`, {headers: {apikey: SB_KEY}});
         if (!r.ok) throw new Error(r.status);
         const righe = await r.json();
-        righe.forEach((x) => { if (x.solito > 0) mappa.set(x.canale_id, {sl: +x.solito, t: x.letto_il, o: Array.isArray(x.outlier) ? x.outlier : []}); });
+        righe.forEach((x) => { if (x.solito > 0) mappa.set(x.canale_id, {sl: +x.solito, t: x.letto_il, n: +x.n || 0, o: Array.isArray(x.outlier) ? x.outlier : []}); });
         if (righe.length < 1000) break;
       }
       let n = 0;
@@ -1005,9 +1005,24 @@
         preparaVideo(v); VID.push(v); VBYID.set(v.i, v); nuovi++;
       }
       if (nuovi && S.tab === 'video') disegnaVideo();
-      SOLITO.stato = 'ok'; SOLITO.n = n;
+      SOLITO.stato = 'ok'; SOLITO.n = mappa.size; SOLITO.aggiunti = nuovi; SOLITO.coOut = new Set(SOLITO.outlier.map((o) => o.ci)).size;
+      // quando: per ogni giorno, canali letti, Shorts letti e outlier trovati (giorno dell'ultima lettura del canale)
+      const perG = new Map();
+      mappa.forEach((x) => {
+        const g = x.t ? String(x.t).slice(0, 10) : null;
+        if (!g || !/^\d{4}-\d{2}-\d{2}$/.test(g)) return;
+        const r = perG.get(g) || {g, canali: 0, shorts: 0, out: 0};
+        r.canali++; r.shorts += x.n; r.out += x.o.filter((o) => o && o.i && o.v > 0).length;
+        perG.set(g, r);
+      });
+      SOLITO.giorni = [];
+      const chiavi = [...perG.keys()].sort();
+      if (chiavi.length) for (let d = new Date(chiavi[0] + 'T12:00:00'), fine = new Date(chiavi[chiavi.length - 1] + 'T12:00:00'); d <= fine; d.setDate(d.getDate() + 1)) {
+        const g = d.toISOString().slice(0, 10); SOLITO.giorni.push(perG.get(g) || {g, canali: 0, shorts: 0, out: 0});
+      }
     } catch (e) { SOLITO.stato = 'errore'; }
     if (S.tab === 'canali') disegnaCanali();
+    if (S.tab === 'stato') disegnaStato();
   }
   function filtraCanali() {
     const q = S.qc.trim().toLowerCase(), [s0, s1] = rng('csubs'), nv = mn('cnv') || 0, pe = mn('cpe') || 0;
@@ -1149,6 +1164,18 @@
         statTile('Ancora in coda', full(Q.restano), giorniCoda ? `circa ${giorniCoda} giorni (${Q.al_giorno} al giorno)` : 'coda finita'),
         statTile('Non raggiungibili', full(C.non_disp + C.non_trov), 'chiusi, privati o cancellati'),
         statTile('Video nell’archivio', fmt(ST.archivio_video), 'storico fino a inizio novembre')),
+      el('h2', {class: 'sec', style: 'margin:18px 0 4px', text: 'Da Radar Nicchie'}),
+      el('p', {class: 'note', text: 'Quello che Radar Nicchie ha letto e condiviso con questa pagina (gli ultimi 50 Shorts di ogni canale).'}),
+      el('div', {class: 'stats'}, ...(SOLITO.stato === 'ok' ? [
+        statTile('Canali letti', full(SOLITO.n), 'di cui ' + full(SOLITO.coOut) + ' con almeno un outlier'),
+        statTile('Video outlier trovati', full(SOLITO.outlier.length), 'almeno 5 volte il solito del canale'),
+        statTile('Video aggiunti all’elenco', full(SOLITO.aggiunti), 'non erano già nell’archivio')] : [
+        statTile('Canali letti', SOLITO.stato === 'errore' ? '—' : '…', SOLITO.stato === 'errore' ? 'non riesco a leggere i dati' : 'sto leggendo'),
+        statTile('Video outlier trovati', SOLITO.stato === 'errore' ? '—' : '…'),
+        statTile('Video aggiunti all’elenco', SOLITO.stato === 'errore' ? '—' : '…')])),
+      SOLITO.stato === 'ok' && SOLITO.giorni.length ? el('div', {class: 'tools', style: 'margin-top:14px'},
+        colonne('Canali letti e outlier trovati', 'Per ogni giorno: canali letti da Radar Nicchie e video outlier trovati.', SOLITO.giorni, {serie: [{k: 'canali', n: 'canali letti', c: 'var(--accent)'}, {k: 'out', n: 'outlier trovati', c: '#ec4899'}]}),
+        colonne('Shorts letti', 'Per ogni giorno: quanti Shorts Radar Nicchie ha guardato (gli ultimi 50 di ogni canale).', SOLITO.giorni, {serie: [{k: 'shorts', n: 'Shorts letti', c: '#06b6d4'}]})) : null,
       Q.totale ? el('div', {class: 'panel', style: 'margin-top:14px'}, el('h2', {style: 'font-size:16px', text: 'Coda dei canali da aggiungere'}),
         el('div', {class: 'bars', style: 'margin-top:10px'}, bar('Già aggiunti', Q.totale - Q.restano, Q.totale, `${full(Q.totale - Q.restano)} di ${full(Q.totale)}`))) : null,
       el('div', {class: 'tools', style: 'margin-top:14px'},
