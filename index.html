@@ -330,6 +330,11 @@
   .simbar { height: 6px; border-radius: 999px; background: var(--soft); overflow: hidden; margin-top: 5px; }
   .simbar i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
   @media (max-width: 640px) { .simrow { grid-template-columns: 44px 1fr auto; } .simrow .simmid { display: none; } }
+  /* parte alta più compatta: "Sincronizza" piccolo, e tutti i filtri sulla stessa riga */
+  .top { gap: 12px 18px; }
+  .chip.sync-btn { font-size: 12px; padding: 5px 11px; }
+  .ffil .fsel { flex: 1 1 130px; min-width: 118px; }
+  @media (min-width: 641px) { .tab { padding: 9px 13px; } .brand h1 { font-size: 28px; } }
 </style>
 </head>
 <body>
