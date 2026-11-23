@@ -661,7 +661,7 @@
     if (S.tab === 'preferiti') disegnaPref();
   }
   function card(v, piccola) {
-    const th = el('div', {class: 'thumb'}, el('img', {src: THUMB[v.i], alt: '', loading: 'lazy', decoding: 'async'}),
+    const th = el('div', {class: 'thumb'}, el('img', {src: THUMB[v.i], alt: '', loading: 'lazy', decoding: 'async', onerror: ripiega(v.i)}),
       el('span', {class: 'views'}, fmt(v.v)), v.d !== null ? el('span', {class: 'dur'}, dur(v.d)) : null, piccola ? null : stella(v));
     return el('div', {class: 'card', role: 'button', tabindex: '0', 'aria-label': v.t, onclick: () => apriVideo(v),
       onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apriVideo(v); } }},
@@ -669,7 +669,7 @@
   }
   function riga(v) {
     return el('div', {class: 'row', role: 'button', tabindex: '0', onclick: () => apriVideo(v), onkeydown: (e) => { if (e.key === 'Enter') apriVideo(v); }},
-      el('img', {src: THUMB[v.i], alt: '', loading: 'lazy', decoding: 'async'}),
+      el('img', {src: THUMB[v.i], alt: '', loading: 'lazy', decoding: 'async', onerror: ripiega(v.i)}),
       el('div', null, el('div', {class: 't'}, v.t), el('div', {class: 'c'}, v.c + ' · uscito ' + fa(v.u) + ' (' + dataIt(v.u) + ')')),
       el('div', {class: 'n hide-s'}, fmt(v.s), el('small', {text: 'iscritti'})),
       el('div', {class: 'n'}, fmt(v.v), el('small', {text: 'visualizzazioni'})),
@@ -956,6 +956,9 @@
 
   // ---------- video outlier (trovati da Radar Nicchie negli ultimi 50 Shorts di un canale): si vedono nella scheda del canale ----------
   const thumbYt = (id) => 'https://i.ytimg.com/vi/' + encodeURIComponent(id) + '/mqdefault.jpg';
+  // miniatura verticale e nitida degli Shorts (1080×1920); se non esiste si ripiega su quella piccola
+  const thumbVert = (id) => 'https://i.ytimg.com/vi/' + encodeURIComponent(id) + '/oar2.jpg';
+  const ripiega = (id) => (e) => { if (!e.target.dataset.rip) { e.target.dataset.rip = '1'; e.target.src = thumbYt(id); } };
   const cellaVideoOut = (o, conCanale) => el('div', {class: 'who'},
     el('img', {src: thumbYt(o.i), alt: '', loading: 'lazy', style: 'width:64px;height:40px;object-fit:cover;border-radius:6px;flex:none'}),
     el('div', null, el('a', {href: url(o.i), target: '_blank', rel: 'noopener noreferrer', onclick: (e) => e.stopPropagation()}, el('b', {text: o.t})), conCanale ? el('div', {class: 'dsub', text: o.c}) : null));
@@ -1003,7 +1006,7 @@
         if (VBYID.has(o.i)) { VBYID.get(o.i).out = true; continue; }
         if (!o.d || !/^\d{4}-\d{2}-\d{2}$/.test(o.d)) continue;
         const v = {i: o.i, t: o.t, c: o.c, ci: o.ci, s: o.s === undefined ? null : o.s, v: o.v, x: Math.round(o.x * 10) / 10, n: Math.round(o.sl), d: null, u: o.d, h: null, l: null, m: null};
-        if (!THUMB[v.i]) THUMB[v.i] = thumbYt(v.i);
+        if (!THUMB[v.i]) THUMB[v.i] = thumbVert(v.i);
         v.out = true; preparaVideo(v); VID.push(v); VBYID.set(v.i, v); nuovi++;
       }
       if ((nuovi || SOLITO.outlier.length) && (S.tab === 'video' || S.tab === 'outlier')) disegnaVideo();
