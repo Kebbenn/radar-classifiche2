@@ -54,6 +54,15 @@
   .tab:hover { color: var(--ink); background: var(--soft); }
   .tab[aria-selected="true"] { background: var(--ink); color: var(--bg); }
   .tab .cnt { margin-left: 6px; font-size: 12px; opacity: .8; }
+  .sync-btn { white-space: nowrap; }
+  .sync-btn.ok { border-color: #2e9e5b; color: #2e9e5b; }
+  .sync-btn.err { border-color: var(--accent); color: var(--accent); }
+  .sync-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; margin: 0 0 14px; display: grid; gap: 10px; max-width: 620px; }
+  .sync-panel[hidden] { display: none; }
+  .sync-panel p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .sync-panel .riga { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sync-panel input { flex: 1 1 200px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+  .sync-panel .msg { color: var(--ink); font-size: 13px; min-height: 1em; }
   .fresh { margin-left: auto; font-size: 12.5px; color: var(--muted); text-align: right; }
   .fresh b { color: var(--ink); font-weight: 600; }
 
@@ -337,8 +346,10 @@
       <button class="tab" role="tab" id="tab-preferiti" data-tab="preferiti">Preferiti<span class="cnt" id="cnt-pref"></span></button>
       <button class="tab" role="tab" id="tab-gustavior" data-tab="gustavior">Gustavior</button>
     </nav>
+    <button class="chip sync-btn" id="sync-btn" type="button" aria-expanded="false" title="Sincronizza preferiti, competitor e scorciatoie tra i tuoi browser">☁ Sincronizza</button>
     <div class="fresh" id="fresh"></div>
   </header>
+  <div class="sync-panel" id="sync-panel" hidden></div>
 </div>
 
 <!-- VIDEO -->
@@ -533,13 +544,13 @@
   try { PREF = new Set(JSON.parse(localStorage.getItem('radar-pref') || '[]')); } catch (e) { /* senza memoria locale */ }
   let PREF_T = {};
   try { PREF_T = JSON.parse(localStorage.getItem('radar-pref-t') || '{}') || {}; } catch (e) { PREF_T = {}; }
-  const salvaPref = () => { try { localStorage.setItem('radar-pref-t', JSON.stringify(PREF_T)); } catch (e) { /* ok */ } };
-  const salvaPref0 = () => { try { localStorage.setItem('radar-pref', JSON.stringify([...PREF])); } catch (e) { /* ok */ } };
+  const salvaPref = () => { try { localStorage.setItem('radar-pref-t', JSON.stringify(PREF_T)); } catch (e) { /* ok */ } if (window.radarSync) window.radarSync.modificato('pref'); };
+  const salvaPref0 = () => { try { localStorage.setItem('radar-pref', JSON.stringify([...PREF])); } catch (e) { /* ok */ } if (window.radarSync) window.radarSync.modificato('pref'); };
   const salvaTutto = () => { salvaPref0(); salvaPref(); };
   // competitor: canali che Kevin segue da vicino (salvati nel browser, come i preferiti)
   let COMP = new Set(), COMP_T = {};
   try { COMP = new Set(JSON.parse(localStorage.getItem('radar-comp') || '[]')); COMP_T = JSON.parse(localStorage.getItem('radar-comp-t') || '{}') || {}; } catch (e) { COMP = new Set(); COMP_T = {}; }
-  const salvaComp = () => { try { localStorage.setItem('radar-comp', JSON.stringify([...COMP])); localStorage.setItem('radar-comp-t', JSON.stringify(COMP_T)); } catch (e) { /* ok */ } };
+  const salvaComp = () => { try { localStorage.setItem('radar-comp', JSON.stringify([...COMP])); localStorage.setItem('radar-comp-t', JSON.stringify(COMP_T)); } catch (e) { /* ok */ } if (window.radarSync) window.radarSync.modificato('comp'); };
   const S0 = {tab: 'video', q: '', periodo: 'all', subs: 'all', volte: '0', minv: 0, sort: 'recenti', vista: 'griglia', mostra: 48, preset: '', cat: 'all', sub: 'all', mom: 'all',
               ccat: 'all', qc: '', csubs: 'all', cnv: '6', cpe: '0', csort: 'pe', cdir: -1, cmostra: 50,
               iSubs: 1200, iNorm: 5000, titolo: 'Ranking the Best Goalkeeper Saves Ever'};
@@ -898,7 +909,7 @@
   const SC_CHIAVI = ['q', 'periodo', 'periodoLo', 'periodoHi', 'subs', 'subsLo', 'subsHi', 'volte', 'volteLo', 'volteHi', 'minv', 'minvLo', 'minvHi', 'sort', 'cat', 'sub', 'mom'];
   let SCORC = [];
   try { SCORC = JSON.parse(localStorage.getItem('radar-scorciatoie') || '[]'); if (!Array.isArray(SCORC)) SCORC = []; } catch (e) { SCORC = []; }
-  const salvaScorc = () => { try { localStorage.setItem('radar-scorciatoie', JSON.stringify(SCORC)); } catch (e) { /* senza memoria locale */ } };
+  const salvaScorc = () => { try { localStorage.setItem('radar-scorciatoie', JSON.stringify(SCORC)); } catch (e) { /* senza memoria locale */ } if (window.radarSync) window.radarSync.modificato('scorc'); };
   const ricercaAttuale = () => { const f = {}; SC_CHIAVI.forEach((k) => { if (S[k] !== undefined && S[k] !== '' && S[k] !== 'all' && S[k] !== 0 && S[k] !== '0') f[k] = S[k]; }); return f; };
   function disegnaScorc(salvando) {
     const g = $('g-preset'); if (!g) return;
@@ -1219,6 +1230,128 @@
     if (tab === 'video') disegnaVideo(); else if (tab === 'canali') disegnaCanali(); else if (tab === 'gustavior') { disegnaGustavior(); disegnaCalcolatore(); disegnaTitolo(); disegnaTassi(); } else if (tab === 'stato') disegnaStato(); else disegnaPref();
   }
 
+  // ---------- sincronizzazione tra browser: stessi preferiti, competitor e scorciatoie ovunque ----------
+  // Usa lo stesso account di Radar Nicchie (la sessione sta nella memoria del sito, uguale per i due siti). I dati stanno nella tabella privata "classifiche_dati".
+  const K_SESS = 'radar-db-sessione', K_SYNC_T = 'radar-sync-t', SEZ_SYNC = ['pref', 'comp', 'scorc'];
+  const lsLeggi = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
+  const lsScrivi = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ok */ } };
+  const SY = {t: lsLeggi(K_SYNC_T, {}) || {}, fatto: lsLeggi('radar-sync-fatto', false) === true, occupato: false, ancora: false, timer: null, stato: 'fuori', msg: '', ultimo: null};
+  const sessSync = () => { const s = lsLeggi(K_SESS, null); return s && s.access_token ? s : null; };   // riletta ogni volta: può averla rinnovata Radar Nicchie
+  async function tokenSync() {
+    let s = sessSync(); if (!s) return null;
+    if (s.scade - Date.now() > 60000) return s.access_token;
+    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {method: 'POST', headers: {apikey: SB_KEY, 'Content-Type': 'application/json'}, body: JSON.stringify({refresh_token: s.refresh_token})});
+    if (!r.ok) {
+      const s2 = sessSync();   // forse l'ha già rinnovata l'altro sito
+      if (s2 && s2.access_token !== s.access_token && s2.scade - Date.now() > 0) return s2.access_token;
+      try { localStorage.removeItem(K_SESS); } catch (e) { /* ok */ }
+      return null;
+    }
+    const d = await r.json();
+    s = {access_token: d.access_token, refresh_token: d.refresh_token, scade: Date.now() + (d.expires_in || 3600) * 1000, email: (d.user && d.user.email) || s.email};
+    lsScrivi(K_SESS, s); return s.access_token;
+  }
+  const utenteDa = (tok) => { try { return JSON.parse(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sub; } catch (e) { return null; } };
+  const istantanea = () => ({pref: [...PREF], pref_t: PREF_T, comp: [...COMP], comp_t: COMP_T, scorc: SCORC});
+  function applicaSez(sez, d) {
+    if (sez === 'pref') { PREF = new Set(d.pref || []); PREF_T = d.pref_t || {}; lsScrivi('radar-pref', [...PREF]); lsScrivi('radar-pref-t', PREF_T); }
+    else if (sez === 'comp') { COMP = new Set(d.comp || []); COMP_T = d.comp_t || {}; lsScrivi('radar-comp', [...COMP]); lsScrivi('radar-comp-t', COMP_T); }
+    else { SCORC = Array.isArray(d.scorc) ? d.scorc : []; lsScrivi('radar-scorciatoie', SCORC); }
+  }
+  function unioneSez(sez, rem) {
+    if (sez === 'pref') return {pref: [...new Set([...(rem.pref || []), ...PREF])], pref_t: {...(rem.pref_t || {}), ...PREF_T}};
+    if (sez === 'comp') return {comp: [...new Set([...(rem.comp || []), ...COMP])], comp_t: {...(rem.comp_t || {}), ...COMP_T}};
+    const nomi = new Set(SCORC.map((x) => x.nome));
+    return {scorc: [...SCORC, ...(Array.isArray(rem.scorc) ? rem.scorc : []).filter((x) => x && !nomi.has(x.nome))].slice(-20)};
+  }
+  const redisegnaSync = () => {
+    if (typeof aggiornaConta === 'function') aggiornaConta();
+    disegnaScorc();
+    if (S.tab === 'preferiti') disegnaPref(); else if (S.tab === 'canali') disegnaCanali(); else if (S.tab === 'video') disegnaVideo();
+  };
+  async function sincronizza() {
+    if (SY.occupato) { SY.ancora = true; return; }
+    SY.occupato = true;
+    try {
+      const tok = await tokenSync();
+      if (!tok) { SY.stato = 'fuori'; SY.msg = ''; return; }
+      const h = {apikey: SB_KEY, Authorization: 'Bearer ' + tok};
+      const r = await fetch(`${SB_URL}/rest/v1/classifiche_dati?select=dati`, {headers: h});
+      if (!r.ok) throw new Error('lettura ' + r.status);
+      const righe = await r.json();
+      const rem = righe[0] && righe[0].dati ? righe[0].dati : null;
+      const rt = (rem && rem.t) || {};
+      const t = {...SY.t};
+      let spingi = !rem, cambiato = false;
+      for (const sez of SEZ_SYNC) {
+        const lt = SY.t[sez] || 0, rtt = rt[sez] || 0;
+        const haRem = rem && (sez === 'scorc' ? rem.scorc !== undefined : rem[sez] !== undefined);
+        if (!haRem) { if (!lt) t[sez] = lt; if (lt || (sez === 'pref' ? PREF.size : sez === 'comp' ? COMP.size : SCORC.length)) { spingi = true; t[sez] = lt || Date.now(); } continue; }
+        if (!SY.fatto) {   // questo browser non si è mai sincronizzato: unisco i due elenchi
+          applicaSez(sez, unioneSez(sez, rem)); t[sez] = Math.max(rtt, Date.now()); spingi = true; cambiato = true;
+        } else if (rtt > lt) { applicaSez(sez, rem); t[sez] = rtt; cambiato = true; }
+        else if (lt > rtt) spingi = true;
+      }
+      SY.t = t; lsScrivi(K_SYNC_T, t); SY.fatto = true; lsScrivi('radar-sync-fatto', true);
+      if (spingi) {
+        const corpo = {user_id: utenteDa(tok), dati: {...istantanea(), t}, aggiornato_il: new Date().toISOString()};
+        if (!corpo.user_id) delete corpo.user_id;
+        const p = await fetch(`${SB_URL}/rest/v1/classifiche_dati?on_conflict=user_id`, {method: 'POST', headers: {...h, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify(corpo)});
+        if (!p.ok) throw new Error('scrittura ' + p.status);
+      }
+      SY.stato = 'ok'; SY.msg = ''; SY.ultimo = new Date();
+      if (cambiato) redisegnaSync();
+    } catch (e) { SY.stato = 'errore'; SY.msg = 'Non riesco a sincronizzare (' + (e.message || 'errore') + '). Riprovo tra poco.'; }
+    finally { SY.occupato = false; disegnaSync(); if (SY.ancora) { SY.ancora = false; setTimeout(sincronizza, 300); } }
+  }
+  window.radarSync = {
+    sincronizza,
+    modificato(sez) { SY.t[sez] = Date.now(); lsScrivi(K_SYNC_T, SY.t); if (sessSync()) { clearTimeout(SY.timer); SY.timer = setTimeout(sincronizza, 1500); } },
+  };
+  async function accediSync() {
+    const em = $('sy-email').value.trim(), pw = $('sy-pw').value;
+    SY.email = em;   // se sbaglio la password, l'email resta scritta
+    if (!em || !pw) { SY.msg = 'Scrivi email e password.'; disegnaSync(); return; }
+    SY.msg = 'Accedo…'; disegnaSync();
+    try {
+      const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {method: 'POST', headers: {apikey: SB_KEY, 'Content-Type': 'application/json'}, body: JSON.stringify({email: em, password: pw})});
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { SY.msg = r.status === 400 ? 'Email o password sbagliate.' : 'Non riesco ad accedere (' + r.status + ').'; disegnaSync(); return; }
+      SY.fatto = false; lsScrivi('radar-sync-fatto', false);   // nuovo accesso: la prima volta unisco i dati di questo browser con quelli salvati
+      lsScrivi(K_SESS, {access_token: d.access_token, refresh_token: d.refresh_token, scade: Date.now() + (d.expires_in || 3600) * 1000, email: (d.user && d.user.email) || em});
+      SY.msg = 'Sincronizzo…'; disegnaSync(); await sincronizza();
+    } catch (e) { SY.msg = 'Non riesco a collegarmi al database. Controlla internet.'; disegnaSync(); }
+  }
+  function disegnaSync() {
+    const b = $('sync-btn'), pan = $('sync-panel'); if (!b || !pan) return;
+    const s = sessSync();
+    b.className = 'chip sync-btn' + (s && SY.stato === 'ok' ? ' ok' : s && SY.stato === 'errore' ? ' err' : '');
+    b.textContent = !s ? '☁ Sincronizza' : SY.stato === 'ok' ? '☁ Sincronizzato' : SY.stato === 'errore' ? '☁ Non sincronizzato' : '☁ Sincronizzo…';
+    if (pan.hidden) return;
+    const aperto = pan.contains(document.activeElement) ? document.activeElement.id : '';
+    pan.replaceChildren();
+    if (!s) {
+      pan.append(el('p', null, 'Accedi con lo stesso account di Radar Nicchie: preferiti, competitor e scorciatoie saranno uguali su tutti i tuoi browser e dispositivi.'),
+        el('div', {class: 'riga'}, el('input', {id: 'sy-email', type: 'email', placeholder: 'Email', autocomplete: 'username', value: SY.email || ''}), el('input', {id: 'sy-pw', type: 'password', placeholder: 'Password', autocomplete: 'current-password'}),
+          el('button', {class: 'btn', type: 'button', id: 'sy-entra', onclick: accediSync}, 'Accedi')),
+        el('div', {class: 'msg', text: SY.msg}));
+      $('sy-pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') accediSync(); });
+    } else {
+      pan.append(el('p', null, 'Connesso come ', el('b', {text: s.email || 'il tuo account'}), '. Preferiti, competitor e scorciatoie sono uguali su tutti i browser dove accedi.' + (SY.ultimo ? ' Ultimo aggiornamento: ' + SY.ultimo.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'}) + '.' : '')),
+        el('div', {class: 'riga'}, el('button', {class: 'btn', type: 'button', onclick: () => { SY.msg = 'Sincronizzo…'; disegnaSync(); sincronizza(); }}, 'Sincronizza ora'),
+          el('button', {class: 'btn', type: 'button', title: 'Esce anche da Radar Nicchie su questo browser', onclick: () => { try { localStorage.removeItem(K_SESS); } catch (e) { /* ok */ } SY.stato = 'fuori'; SY.msg = ''; disegnaSync(); }}, 'Esci')),
+        el('div', {class: 'msg', text: SY.msg}));
+    }
+    if (aperto && $(aperto)) $(aperto).focus();
+  }
+  function iniziaSync() {
+    $('sync-btn').addEventListener('click', () => { const pan = $('sync-panel'); pan.hidden = !pan.hidden; $('sync-btn').setAttribute('aria-expanded', String(!pan.hidden)); disegnaSync(); if (!pan.hidden && !sessSync()) { const e = $('sy-email'); if (e) e.focus(); } });
+    disegnaSync();
+    if (sessSync()) sincronizza();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && sessSync()) sincronizza(); });
+    setInterval(() => { if (!document.hidden && sessSync()) sincronizza(); }, 60000);
+  }
+
   // ---------- avvio ----------
   function start(dati) {
     if (dati && dati.S) S = {...S0, ...dati.S};
@@ -1227,7 +1360,7 @@
     if (GUS && !(dati && dati.S && dati.S.iSubs)) { if (GUS.s) S.iSubs = GUS.s; if (GUS.mv) S.iNorm = GUS.mv; }
     $('q').value = S.q; $('qc').value = S.qc; $('i-subs').value = S.iSubs; $('i-norm').value = S.iNorm; $('i-tit').value = S.titolo;
     costruisciFiltri(); costruisciCanali(); costruisciStrumenti(); aggiornaConta();
-    caricaSolito();
+    caricaSolito(); iniziaSync();
     $('tab-video').addEventListener('click', () => vai('video')); $('tab-canali').addEventListener('click', () => vai('canali'));
     $('tab-stato').addEventListener('click', () => vai('stato')); $('tab-preferiti').addEventListener('click', () => vai('preferiti')); $('tab-gustavior').addEventListener('click', () => vai('gustavior'));
     $('b-copia-pref').addEventListener('click', () => { if (S.prefVista === 'comp') { const nomi = [...COMP].map((id) => ((COMP_T[id] || [])[0] || id) + ' ' + urlCanale(id)); if (nomi.length) copia(nomi.join('\n'), `Copiati ${nomi.length} competitor`); else toast('Non hai ancora competitor'); return; } const l = VID.filter((v) => PREF.has(v.i)); if (l.length) copia(testoElenco(l), `Copiati ${l.length} video`); else toast('Non hai ancora preferiti'); });
